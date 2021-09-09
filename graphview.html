@@ -63,13 +63,16 @@
       #clear {
           display: none;
       }
+      #home-button, #explore-button {
+          color: inherit;
+          text-decoration: inherit;
+      }
    </style>
    <body>
       <div id="navbar">
          <ul>
-            <li id="home-button"><a href="./graphview.html"><i class="fas fa-sun"></i> Graph view</a></li>
-            <li id="explore-button"><a href="./matrixview.html"><i class="fas fa-columns"></i> Matrix view</a></li>
-            <li id="dashboard-button"><i class="fas fa-home"></i> About</li>
+            <li><a href="./graphview.html" id="home-button"><i class="fas fa-sun"></i> Graph view</a></li>
+            <li><a href="./matrixview.html" id="explore-button"><i class="fas fa-columns"></i> Matrix view</a></li>
          </ul>
          <hr>
       </div>
