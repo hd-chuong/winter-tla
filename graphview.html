@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang='en'>
+   <head>
+      <meta charset="UTF-8"/>
+      <meta name="description" content="Data Visualisation"/>
+      <meta name="keywords" content="HTML, CSS, D3"/>
+      <meta name="author" content="Chuong Ho" />
+      <!-- Font -->
+      <link href="https://fonts.googleapis.com/css2?family=Lora&display=swap" rel="stylesheet">
+      <link href="https://fonts.googleapis.com/css2?family=Manrope&display=swap" rel="stylesheet">
+      <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@600&display=swap" rel="stylesheet">
+      <!-- CSS -->
+      <!-- Bootstrap -->
+      <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
+      <link href="styles/dashboard.css" type="text/css" rel="stylesheet"/>
+      <!-- Javascript-->
+      <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js" integrity="sha384-IQsoLXl5PILFhosVNubq5LC7Qb9DXgDA9i+tQ8Zj3iwWAwPtgFTxbJ8NT4GN1R8p" crossorigin="anonymous"></script>
+      <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.min.js" integrity="sha384-cVKIPhGWiC2Al4u+LWgxfKTRIcfu0JTxR+EQDz/bgldoEyl4H0zUF0QKbrJ0EcQF" crossorigin="anonymous"></script>
+      <script src="//d3js.org/d3.v4.min.js"></script>
+      <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.13.0/css/all.min.css" integrity="sha256-h20CPZ0QyXlBuAw7A+KluUYx/3pK+c7lYEpqLTlxjYQ=" crossorigin="anonymous" />
+      <title>Visualisation of TLA+ Specifications</title>
+   </head>
+   <style type="text/css">
+      div.tooltip { 
+      position: absolute;     
+      text-align: center;     
+      width: 150px;          
+      padding: 2px;       
+      font: 12px sans-serif;    
+      background: lightgrey; 
+      border: 0px;    
+      border-radius: 8px;     
+      pointer-events: none;     
+      }
+      .links line {
+      stroke: #BBC;
+      stroke-opacity: 0.6;
+      }
+      path {
+      fill-opacity: .1;
+      stroke-opacity: 1;
+      }
+      .clusterLinks path {
+      stroke: #BBC;
+      fill: none;
+      }
+      .tick line {
+      stroke: #BBB;
+      stroke-width: 0.5;
+      }
+      .hidden {
+      display: none;
+      }
+      .title {
+        margin-left: 1em;
+        margin-bottom: 0.5em;
+        margin-top: 0.5em;
+      }
+      #uploadLabel {
+        margin-right: 0.5em;
+      }
+      #clear {
+          display: none;
+      }
+   </style>
+   <body>
+      <div id="navbar">
+         <ul>
+            <li id="home-button"><a href="./graphview.html"><i class="fas fa-sun"></i> Graph view</a></li>
+            <li id="explore-button"><a href="./matrixview.html"><i class="fas fa-columns"></i> Matrix view</a></li>
+            <li id="dashboard-button"><i class="fas fa-home"></i> About</li>
+         </ul>
+         <hr>
+      </div>
+      <div id="dashboard-main">
+      <div id="toolbar">
+         <h2 class="title">GRAPH VIEW</h2> 
+         <p>
+            <label id="uploadLabel">Upload Graph JSON file</label><input type="file" id="input" class="form-control-file" accept=".json">
+            <button type="button" class="btn btn-danger" id="clear">Clear graph</button>
+         </p>
+         <p>
+         <div class="form-check">
+            <input class="form-check-input" type="checkbox" value="" id="showHyperLinksOnly" checked> 
+            <label class="form-check-label" for="flexCheckChecked">
+            Show hyperlinks only
+            </label>
+         </div>
+         </p>
+      </div>
+      </div>
+      <script>
+         const inputElement = document.getElementById("input");
+         const clearButton = document.getElementById("clear");
+         const showHyperLinksOnly = document.getElementById("showHyperLinksOnly");
+         var graph = {nodes: [], links: []};
+         
+         inputElement.addEventListener("change", handleFiles, false);
+         clearButton.addEventListener("click", clearDashboard, false);
+         showHyperLinksOnly.addEventListener("click", onHyperLinkOptionChange, false);
+         
+         function onHyperLinkOptionChange(event)
+         {
+             if (showHyperLinksOnly.checked)
+             {
+                 clusterLinkVisible.fill(true);
+                 graph.links.forEach((link) => link.visible = false);
+                 ticked();
+             }
+         }
+         
+         function handleFiles() {
+             const fileList = this.files;
+             const reader = new FileReader();
+             reader.addEventListener('error', (error) => {
+                 console.log(error);
+             })
+             reader.addEventListener('load', (event) => {
+                 const result = event.target.result;
+                 try {
+                     graph = JSON.parse(result);
+                 }
+                 catch(e) {
+                     console.log(e);
+                 }
+                 finally {
+                     render(graph);
+                 }  
+             });
+             reader.readAsText(fileList[0]);
+             clearButton.style.display = "block";
+         }
+         
+         function computeClusterGraph(graph)
+         {
+             let clusterGraph = {
+                 nodes: [],
+                 links: []
+             };
+         
+             graph.nodes.forEach(node => {
+                 clusterGraph.nodes[node.group] = (clusterGraph.nodes[node.group] || 0) + 1;
+             });
+         
+             graph.links.forEach(({source, target}) => {
+                 let sourceNode = graph.nodes.find(({id}) => id === source);
+                 let targetNode = graph.nodes.find(({id}) => id === target);
+         
+                 if (sourceNode && targetNode)
+                 {
+                     let matchedEdge = clusterGraph.links.find(edge => 
+                         edge.source === sourceNode.group && edge.target === targetNode.group
+                     );
+         
+                     if (matchedEdge) {
+                         matchedEdge.count += 1;
+                     }
+                     else {
+                         clusterGraph.links = [
+                             ...clusterGraph.links, {
+                             source: sourceNode.group, 
+                             target: targetNode.group, 
+                             count: 1
+                         }];
+                     }
+                 }   
+             });
+             return clusterGraph;
+         }
+         collapsibles = new Array(10).fill(true);
+         let margin = {top: 100, right: 100, bottom: 100, left: 100};
+         
+         let width = 1100,
+             height = 700,
+             padding = 100, // separation between same-color circles
+             clusterPadding = 500, // separation between different-color circles
+             maxRadius = height*0.1;
+         let scaleFactor = 1.2;
+         let color = d3.scaleOrdinal(d3.schemeCategory20);
+         
+         var x = d3.scaleLinear().range([0, width]);
+         var y = d3.scaleLinear().range([height, 0]);
+         
+         let valueline = d3.line()
+             .x(function(d) { return d[0]; })
+             .y(function(d) { return d[1]; })
+             .curve(d3.curveCatmullRomClosed);
+         
+         let n = 200, // total number of nodes
+             m = 10, // number of distinct clusters
+             clusters = new Array(m);
+         
+         let svg = d3.select('#dashboard-main')
+             .append('svg')
+             .attr('height', height)
+             .attr('width', width)
+             .append('g')
+             .attr('transform', 'translate(' + width / 2 + ',' + height / 2 + ')');
+         
+         // Define the div for the tooltip
+         let div = d3.select("body").append("div") 
+             .attr("class", "tooltip")       
+             .style("opacity", 0);
+         
+         var groups;
+         var clusterGraph = { nodes: [], links: []};
+         var clusterLinkVisible = [];
+         
+         function initializeVisualisation(svg) 
+         {
+             svg
+             .append("g")			
+             .attr("class", "grid")
+             .attr("transform", "translate(-" + width / 2 + ", " + height / 2 + ")")
+             .call(d3.axisBottom(x)
+                 .ticks(5).tickSize(-height)
+                 .tickFormat(""));
+         
+             svg.append("g")			
+                 .attr("class", "grid")
+                 .attr("transform", "translate(-" + width / 2 + ",-" + height / 2 + ")")
+                 .call(d3
+                     .axisLeft(y)
+                     .ticks(5)
+                     .tickSize(-width)
+                     .tickFormat("")
+                 );
+             
+             groups = svg
+                     .append('g')
+                     .attr('class', 'groups');
+         }
+         
+         function clearDashboard()
+         {
+             svg.selectAll("*").remove();
+             document.getElementById("input").value = "";
+             clearButton.style.display = "none";
+         }
+         
+         var circles, links, clusterLinks, centroids, circles, paths ;
+         
+         function render(graph) {
+             initializeVisualisation(svg);
+         
+             let nodes = graph.nodes.map((d) => {
+                 // scale radius to fit on the screen
+                 let scaledRadius  = 30;
+                 let forcedCluster = +d.group;
+         
+                 // add cluster id and radius to array
+                 d = {   
+                     cluster     : forcedCluster,
+                     r           : 20,
+                     major       : d.Major,
+                     major_cat   : d.Major_category
+                 };
+                 // add to clusters array if it doesn't exist or the radius is larger than another radius in the cluster
+                 if (!clusters[forcedCluster] || (scaledRadius > clusters[forcedCluster].r)) clusters[forcedCluster] = d;
+                 return d;
+             });
+         
+             clusterGraph = computeClusterGraph(graph);
+             clusterLinkVisible = new Array(clusterGraph.links.length).fill(true);
+             
+             console.log(clusterGraph);
+             
+             centroids = svg.append('g')
+                     .attr('class', 'centroids')
+                     .selectAll('circle')
+                     .data(clusterGraph.nodes.filter(d => d).map((d, i) => i + 1))
+                     .enter()
+                     .append('circle')
+                     .attr('r', 100)
+                     .attr('fill', d => color(d))
+                     .attr('opacity', 0.1)
+                     .attr('cx', (d) => 100 * d)
+                     .attr('cy', (d) => 100 * d)
+                     .on("click", (d) => {
+                         collapsibles[d] = !collapsibles[d];
+                         ticked();
+                     });
+         
+             links = svg
+                     .append("g")
+                     .attr("class", "links") 
+                     .selectAll("line")
+                     .data(graph.links)
+                     .enter()
+                     .append("line")
+                     .on("mouseover", function(d, i) {
+                         console.log(d);
+                         div.transition()    
+                             .duration(200)    
+                             .style("opacity", .9);    
+                         
+                         div.html(`
+                             <h6>Link: ${i}</h6>
+                             <br/>
+                             <p> Source cluster: <strong>${d.source.index}</strong></p>
+                             <p> Target cluster: <strong>${d.target.index}</strong></p>
+                             `)  
+                         .style("left", (d3.event.pageX) + "px")   
+                         .style("top", (d3.event.pageY - 28) + "px");  
+                         })          
+                     .on("mouseout", function(d) {   
+                         div.transition()    
+                             .duration(500)    
+                             .style("opacity", 0); 
+                     });
+         
+             clusterLinks = svg.append('g')
+                                 .attr('class', 'clusterLinks')
+                                 .selectAll("path")
+                                 .data(clusterGraph.links)
+                                 .enter()
+                                 .append("path")
+                                 .attr("stroke-width", d => 3 * d.count)
+                                 .attr("marker-end", "url(#end)")
+                                 .on("click", (d, i) => {
+                                     // toggle the visibility of the cluster links
+                                     console.log(d);
+                                     clusterLinkVisible[i] = !clusterLinkVisible[i];
+                                     graph.links.forEach((link) => {
+                                         if (link.source.cluster === d.source && link.target.cluster === d.target)
+                                         {
+                                             console.log(link.source.cluster, link.target.cluster);
+                                             link.visible = true;
+                                         }
+                                     })
+                                     ticked();
+                                 })
+                                 .on("mouseover", function(d, i) {
+                                     div.transition()    
+                                         .duration(200)    
+                                         .style("opacity", .9);    
+                                     
+                                     div.html(`
+                                         <h6>Hyperlink: ${i}</h6>
+                                         <br/>
+                                         <p> Source cluster: <strong>${d.source}</strong></p>
+                                         <p> Target cluster: <strong>${d.target}</strong></p>
+                                         <p> Count: <strong>${d.count}</strong></p>
+                                         `)  
+                                     .style("left", (d3.event.pageX) + "px")   
+                                     .style("top", (d3.event.pageY - 28) + "px");  
+                                     })          
+                                 .on("mouseout", function(d) {   
+                                     div.transition()    
+                                         .duration(500)    
+                                         .style("opacity", 0); 
+                                 });
+             
+             // append the circles to svg then style
+             // add functions for interaction
+             circles = svg
+                 .append('g')
+                 .datum(nodes)
+                 .selectAll('.circle')
+                 .data(d => d)
+                 .enter()
+                 .append('circle')
+                 .attr('r', (d) => d.r)
+                 .attr('fill', (d) => color(d.cluster))
+                 .call(d3.drag()
+                     .on("start", dragstarted)
+                     .on("drag", dragged)
+                     .on("end", dragended))
+                 // add tooltips to each circle
+                 .on("mouseover", function(d, i) {
+                     const incomingCount = graph.links.reduce((prevCount, link) => 
+                      prevCount + (link.target.index === i ? 1 : 0), 0);
+                     const outcomingCount = graph.links.reduce((prevCount, link) => 
+                      prevCount + (link.source.index === i ? 1 : 0), 0);
+                     div.transition()    
+                         .duration(200)    
+                         .style("opacity", .9);    
+                     div.html(`
+                         <h6>Node: ${d.index}</h6>
+                         <br/>
+                         <p> Cluster: <strong>${d.cluster}</strong> </p>
+                         <p> Incoming count: <strong>${incomingCount}</strong></p>
+                         <p> Outcoming count: <strong>${outcomingCount}</strong></p>
+                         <p> State description: <strong>${"#FIXME"}</strong> </p>
+                         `)  
+                         .style("left", (d3.event.pageX) + "px")   
+                         .style("top", (d3.event.pageY - 28) + "px");  
+                     })          
+                 .on("mouseout", function(d) {   
+                     div.transition()    
+                         .duration(500)    
+                         .style("opacity", 0); 
+                 });
+             
+             groupIds = d3.set(graph.nodes.map(function(n) { return +n.group; }))
+                             .values()
+                             .map( function(groupId) {
+                             return { 
+                                 groupId : groupId,
+                                 count : graph.nodes.filter(function(n) { return +n.group == groupId; }).length
+                             };
+                             })
+                             .filter( function(group) { return group.count > 2;})
+                             .map( function(group) { return group.groupId; });
+         
+             paths = groups.selectAll('.path_placeholder')
+             .data(groupIds, function(d) { return +d; })
+             .enter()
+             .append('g')
+             .attr('class', 'path_placeholder')
+             .append('path')
+             .attr('stroke', function(d) { return color(d); })
+             .attr('fill', function(d) { return color(d); })
+             .attr('opacity', 0);
+         
+             paths
+             .transition()
+             .duration(2000)
+             .attr('opacity', 1);
+             
+             // add interaction to the groups
+             groups
+             .selectAll('.path_placeholder')
+             .call(d3.drag()
+             .on('start', group_dragstarted)
+             .on('drag', group_dragged)
+             .on('end', group_dragended)
+             );
+         
+             // create the clustering/collision force simulation
+             let simulation = d3
+                         .forceSimulation(nodes)
+                         .velocityDecay(0.2)
+                         .force("x", d3.forceX().strength(.005))
+                         .force("y", d3.forceY().strength(.005))
+                         .force("collide", collide)
+                         .force("cluster", clustering)
+                         .force("charge", d3.forceManyBody().strength(-1000))
+                         .on("tick", ticked)
+                         .force("link", d3.forceLink().links(graph.links)); 
+             
+             simulation
+                 .nodes(nodes)
+                 .on('tick', ticked)
+                 .force('link')
+                 .links(graph.links);
+         
+             // Drag functions used for interactivity
+             function dragstarted(d) {
+                 if (!d3.event.active) simulation.alphaTarget(0.3).restart();
+                 d.fx = d.x;
+                 d.fy = d.y;
+             }
+         
+             function dragged(d) {
+                 d.fx = d3.event.x;
+                 d.fy = d3.event.y;
+             }
+         
+             function dragended(d) {
+                 if (!d3.event.active) simulation.alphaTarget(0);
+                 d.fx = null;
+                 d.fy = null;
+             }
+         
+             // These are implementations of the custom forces.
+             function clustering(alpha) {
+                 nodes.forEach(function(d) {
+                     var cluster = clusters[d.cluster];
+                     if (cluster === d) return;
+                     var x = d.x - cluster.x,
+                         y = d.y - cluster.y,
+                         l = Math.sqrt(x * x + y * y),
+                         r = d.r + cluster.r;
+                     if (l !== r) {
+                         l = (l - r) / l * alpha;
+                         d.x -= x *= l;
+                         d.y -= y *= l;
+                         cluster.x += x;
+                         cluster.y += y;
+                     }
+                 });
+             }
+         
+                 // drag groups
+             function group_dragstarted(groupId) {
+                 if (!d3.event.active) simulation.alphaTarget(0.3).restart();
+                 d3.select(this).select('path').style('stroke-width', 3);
+             }
+         
+             function group_dragged(groupId) {
+                 node
+                 .filter(function(d) { return d.group == groupId; })
+                 .each(function(d) {
+                 d.x += d3.event.dx;
+                 d.y += d3.event.dy;
+                 })
+             }
+         
+             function group_dragended(groupId) {
+                 if (!d3.event.active) simulation.alphaTarget(0.3).restart();
+                 d3.select(this).select('path').style('stroke-width', 1);
+             }
+         
+         
+             function collide(alpha) {
+                 var quadtree = d3.quadtree()
+                     .x((d) => d.x)
+                     .y((d) => d.y)
+                     .addAll(nodes);
+         
+                 nodes.forEach(function(d) {
+                     var r = d.r + maxRadius + Math.max(padding, clusterPadding),
+                         nx1 = d.x - r,
+                         nx2 = d.x + r,
+                         ny1 = d.y - r,
+                         ny2 = d.y + r;
+                     quadtree.visit(function(quad, x1, y1, x2, y2) {
+         
+                     if (quad.data && (quad.data !== d)) {
+                         var x = d.x - quad.data.x,
+                             y = d.y - quad.data.y,
+                             l = Math.sqrt(x * x + y * y),
+                             r = d.r + quad.data.r + (d.cluster === quad.data.cluster ? padding : clusterPadding);
+                         if (l < r) {
+                         l = (l - r) / l * alpha;
+                         d.x -= x *= l;
+                         d.y -= y *= l;
+                         quad.data.x += x;
+                         quad.data.y += y;
+                         }
+                     }
+                     return x1 > nx2 || x2 < nx1 || y1 > ny2 || y2 < ny1;
+                     });
+                 });
+             }
+         }
+         
+         // select nodes of the group, retrieve its positions
+         // and return the convex hull of the specified points
+         // (3 points as minimum, otherwise returns null)
+         var polygonGenerator = function(groupId) {
+             var node_data = circles
+                 .filter(function(d) { return d.cluster == groupId; })
+                 .data();
+         
+             var node_coords = node_data
+                 .map(function(d) { return [d.x, d.y]; });   
+             
+             console.log(node_data);
+         
+             return d3.polygonHull(node_coords);
+         };
+         
+         function ticked() {
+                 links.attr("marker-end", "url(#end)")
+                     .attr('x1', function(d) { return d.source.x; })
+                     .attr('y1', function(d) { return d.source.y; })
+                     .attr('x2', function(d) { return d.target.x; })
+                     .attr('y2', function(d) { return d.target.y; })
+                     .attr('stroke-width', d => {
+                         // return collapsibles[d.source.cluster] || collapsibles[d.target.cluster] ? 0 : (d.visible ? 1 : 0)}
+                         return (d.visible ? 3: 0) 
+                         }
+                         );
+         
+                 circles
+                     .attr('opacity', d => collapsibles[d.cluster] ? 0 : 1)
+                     .attr('cx', function(d) { return d.x; })
+                     .attr('cy', function(d) { return d.y; });
+                 
+                 var centers = new Array(groupIds.length + 1);
+                 groupIds.forEach(function(groupId) {
+                     var path = paths.filter(function(d) { return d == groupId;})
+                     .attr('transform', 'scale(1) translate(0,0)')
+                     .attr('d', function(d) {
+                         polygon = polygonGenerator(d);      
+                         centroid = d3.polygonCentroid(polygon);
+                         centers[groupId] = centroid;
+                         
+                         // to scale the shape properly around its points:
+                         // move the 'g' element to the centroid point, translate
+                         // all the path around the center of the 'g' and then
+                         // we can scale the 'g' element properly
+                         centroids
+                         .filter((d) => d == groupId)
+                         .attr("cx", centroid[0])
+                         .attr("cy", centroid[1])
+                         return valueline(
+                             polygon.map(function(point) {
+                                 return [  point[0] - centroid[0], point[1] - centroid[1]];
+                             })
+                         );
+                     });
+         
+                     d3.select(path.node().parentNode).attr('transform', 'translate('  + centroid[0] + ',' + (centroid[1]) + ') scale(' + scaleFactor + ')');
+                 });
+         
+                 clusterLinks
+                 .attr('d', (d) => {
+         
+                     var dx = centers[d.target][0] - centers[d.source][0],
+                     dy = centers[d.target][1] - centers[d.source][1],
+                     dr = Math.sqrt(dx * dx + dy * dy);
+                     const curve = "M" + 
+                         centers[d.source][0] + "," + 
+                         centers[d.source][1] + "A" + 
+                         dr + "," + dr + " 0 0,1 " + 
+                         centers[d.target][0] + "," + 
+                         centers[d.target][1];
+                 
+                     return curve;
+                 })
+                 .attr("opacity", (_, i) => clusterLinkVisible[i] ? 1 : 0)
+             }
+      </script>
+   </body>
+</html>
