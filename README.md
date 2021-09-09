@@ -1,33 +1,29 @@
-# Force-Directed Graph
+# TLA+ Visualisation
 
-https://observablehq.com/@d3/force-directed-graph@149
+## Installation
 
-View this notebook in your browser by running a web server in this folder. For
-example:
+### Step 1. Clone this repository
 
-~~~sh
-npx http-server
+### Step 2. Install Python
+Ensure you have Python 3 installed in your computer. Python is needed to host a minimal REST Server. The demo needs a server because otherwise, the JSON loading component does not work.
+
+### Step 3. Start up the Python simple Server
+
+From your Terminal / PowerShell
+~~~
+python -m http.server 7999
 ~~~
 
-Or, use the [Observable Runtime](https://github.com/observablehq/runtime) to
-import this module directly into your application. To npm install:
+### Step 4. Access the vis demo
 
-~~~sh
-npm install @observablehq/runtime@4
-npm install https://api.observablehq.com/@d3/force-directed-graph.tgz?v=3
+From your browsers
+Viewing the graph-view
+~~~
+http://localhost:7999/graphview.html
 ~~~
 
-Then, import your notebook and the runtime as:
 
-~~~js
-import {Runtime, Inspector} from "@observablehq/runtime";
-import define from "@d3/force-directed-graph";
+Viewing the matrix-view
 ~~~
-
-To log the value of the cell named “foo”:
-
-~~~js
-const runtime = new Runtime();
-const main = runtime.module(define);
-main.value("foo").then(value => console.log(value));
+http://localhost:7999/matrixview.html
 ~~~
